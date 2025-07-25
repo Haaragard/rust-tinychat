@@ -1,0 +1,82 @@
+<html>
+    <body>
+        <form id="form" method="POST">
+            <div class="chat">
+                <div style="display:flex; flex-direction: row;">
+                    <label style="width: fit-content;">Username:</label>
+                    <input style="margin-left: 10px;" type="text" name="username" />
+                </div>
+                <div class="chat-content-wrapper"></div>
+                <div class="chat-input-wrapper">
+                    <textarea name="message"></textarea>
+                </div>
+                <div style="margin-top: 15px;">
+                    <button type="submit">Enviar</button>
+                </div>
+            </div>
+        </form>
+    </body>
+    <header>
+        <style>
+            body { margin: 20px; }
+            .chat {
+                border-radius: 5px;
+                border: 1px solid black;
+                padding: 5px;
+                width: 300px;
+                height: 500px;
+            }
+            .chat-content-wrapper {
+                border-radius: 5px;
+                border: 1px solid black;
+                margin-top: 10px;
+                padding: 5px;
+                width: (100% - 10px);
+                height: 350px;
+            }
+            .chat-input-wrapper > textarea {
+                width: (100% - 10px);
+                height: (150px - 10px);
+                margin-top: 10px;
+                resize: none;
+            }
+            .chat-input-wrapper {
+                border: none;
+            }
+        </style>
+        <script lang="javascript">
+            const chatWrapper = document.getElementsByClassName("chat-content-wrapper");
+            const form = document.getElementById("form");
+
+            form.addEventListener('submit', (event) => {
+                event.preventDefault();
+
+                const formData = new FormData(form);
+                const data = {};
+                for (const [key, value] of formData.entries()) {
+                    data[key] = value;
+                }
+
+                fetch('http://192.168.15.4:8080', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: data['username'],
+                        message: data['message']
+                    })
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log(data);
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                    });
+
+                console.log(data);
+            });
+        </script>
+    </header>
+</html>
