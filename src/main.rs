@@ -147,7 +147,6 @@ fn start_websocket_connection(request: tiny_http::Request) {
     let response = tiny_http::Response::new_empty(tiny_http::StatusCode(101))
         .with_header(create_header("Update", "websocket"))
         .with_header(create_header("Connection", "Upgrade"))
-        // .with_header(create_header("Sec-WebSocket-Protocol", "ping"))
         .with_header(create_header("Sec-WebSocket-Accept", &accept_key));
 
     let mut stream = request.upgrade("websocket", response);
