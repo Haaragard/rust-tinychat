@@ -19,3 +19,9 @@ cargo run
 [ ] WebSocket Send saving messages
 [ ] WebSocket Receiving new messages
 [ ] Tests
+
+## References
+
+- [tiny_http](https://github.com/tiny-http/tiny-http/tree/master)
+- [tiny_http - examples](https://github.com/tiny-http/tiny-http/tree/master/examples)
+- [tiny_http - examples - WebSocket](https://github.com/tiny-http/tiny-http/blob/master/examples/websockets.rs)
