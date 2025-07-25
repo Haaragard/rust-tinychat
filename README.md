@@ -13,7 +13,7 @@ cargo run
 
 ## TODOs
 
-- [ ] HTTP Server
+- [x] HTTP Server
 - [x] Can Receive Messages from POST
 - [x] Can Update connection from HTTP to WebSocket on `GET /messages`
 - [ ] WebSocket Send saving messages
