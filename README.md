@@ -16,8 +16,8 @@ cargo run
 - [x] HTTP Server
 - [x] Can Receive Messages from POST
 - [x] Can Update connection from HTTP to WebSocket on `GET /messages`
-- [ ] WebSocket Send saving messages
-- [ ] WebSocket Receiving new messages
+- [ ] WebSocket Push - saving messages
+- [ ] WebSocket Pull - receive new messages
 - [ ] Tests
 
 ## References
