@@ -54,7 +54,7 @@ fn main() {
     }
 }
 
-fn handle_request(mut request: tiny_http::Request, messages_sent: Arc<Mutex<Vec<MessageSent>>>) {
+fn handle_request(request: tiny_http::Request, messages_sent: Arc<Mutex<Vec<MessageSent>>>) {
     match request.method() {
         tiny_http::Method::Options => {
             let response = tiny_http::Response::from_string("Ok")
