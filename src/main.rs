@@ -71,23 +71,6 @@ fn handle_request(mut request: tiny_http::Request, messages_sent: Arc<Mutex<Vec<
 
             let _ = request.respond(response);
         },
-        tiny_http::Method::Post => {
-            let mut content = String::new();
-            request.as_reader().read_to_string(&mut content).unwrap_or_default();
-
-            let message_sent: MessageSent = serde_json::from_str(&content).unwrap();
-
-            if let Ok(mut vec) = messages_sent.lock() {
-                vec.push(message_sent);
-            }
-
-            let response = tiny_http::Response::from_string("{\"message\": \"Success\"}")
-                .with_status_code(201)
-                .with_header(create_header("Access-Control-Allow-Origin", "*"))
-                .with_header(create_header("Content-Type", "application/json"));
-
-            request.respond(response).unwrap_or_default();
-        },
         tiny_http::Method::Get => {
             if request.url().contains("/messages") {
                 match verify_websocket_connection(&request) {
