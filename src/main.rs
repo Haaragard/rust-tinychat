@@ -1,6 +1,6 @@
 extern crate tiny_http;
 
-use std::{io::Read, sync::{Arc, Mutex}};
+use std::{io::{Read, Write}, sync::{Arc, Mutex}};
 
 use serde::{Deserialize, Serialize};
 
@@ -96,7 +96,7 @@ fn handle_request(mut request: tiny_http::Request, messages_sent: Arc<Mutex<Vec<
                         request.respond(response).unwrap_or_default();
                     }
                     _ => {
-                        start_websocket_connection(request);
+                        start_websocket_connection(request, messages_sent);
                     }
                 }
                 return;
@@ -127,7 +127,7 @@ fn verify_websocket_connection(request: &tiny_http::Request) -> Option<tiny_http
         })
 }
 
-fn start_websocket_connection(request: tiny_http::Request) {
+fn start_websocket_connection(request: tiny_http::Request, messages_sent: Arc<Mutex<Vec<MessageSent>>>) {
     let key = match request
         .headers()
         .iter()
@@ -143,7 +143,6 @@ fn start_websocket_connection(request: tiny_http::Request) {
     };
 
     let accept_key = convert_key(key.as_str());
-    // building the "101 Switching Protocols" response
     let response = tiny_http::Response::new_empty(tiny_http::StatusCode(101))
         .with_header(create_header("Update", "websocket"))
         .with_header(create_header("Connection", "Upgrade"))
@@ -151,22 +150,114 @@ fn start_websocket_connection(request: tiny_http::Request) {
 
     let mut stream = request.upgrade("websocket", response);
 
-    loop {
-        let mut out = Vec::new();
-        match Read::by_ref(&mut stream).take(1).read_to_end(&mut out) {
-            Ok(n) if n >= 1 => {
-                // "Hello" frame
-                let data = [0x81, 0x05, 0x48, 0x65, 0x6c, 0x6c, 0x6f];
-                stream.write(&data).ok();
-                stream.flush().ok();
+    let mut last_sent: usize = 0;
 
-                std::thread::sleep(std::time::Duration::from_millis(1000));
-            },
-            Ok(_) => panic!("eof; should never happen"),
-            Err(e) => {
-                println!("closing connection because: {}", e);
-                return;
+    loop {
+        if let Some(msg) = read_websocket_frame(&mut stream) {
+            match serde_json::from_str::<MessageSent>(&msg) {
+                Ok(message_sent) => {
+                    println!("Mensagem recebida via WebSocket: {:?}", message_sent);
+
+                    if let Ok(mut vec) = messages_sent.lock() {
+                        vec.push(message_sent);
+                    }
+                },
+                Err(e) => {
+                    println!("Erro ao desserializar JSON: {}", e);
+                }
+            };
+            println!("Mensagem recebida via WebSocket: {}", msg);
+        } else {
+            println!("Conexão encerrada ou erro ao ler frame.");
+            break;
+        }
+
+        // Envia apenas as mensagens novas
+        if let Ok(vec) = messages_sent.lock() {
+            while last_sent < vec.len() {
+                if let Ok(json) = serde_json::to_string(&vec[last_sent]) {
+                    let _ = send_websocket_text(&mut stream, &json);
+                }
+                last_sent += 1;
             }
-        };
+        }
+
+        // Pequeno delay para evitar busy loop
+        std::thread::sleep(std::time::Duration::from_millis(100));
     }
+}
+
+fn read_websocket_frame<R: Read>(stream: &mut R) -> Option<String> {
+    let mut header = [0u8; 2];
+    if stream.read_exact(&mut header).is_err() {
+        return None;
+    }
+
+    let _fin = header[0] & 0x80 != 0;
+    let opcode = header[0] & 0x0F;
+    let masked = header[1] & 0x80 != 0;
+    let mut payload_len = (header[1] & 0x7F) as usize;
+
+    if payload_len == 126 {
+        let mut ext = [0u8; 2];
+        if stream.read_exact(&mut ext).is_err() {
+            return None;
+        }
+        payload_len = u16::from_be_bytes(ext) as usize;
+    } else if payload_len == 127 {
+        let mut ext = [0u8; 8];
+        if stream.read_exact(&mut ext).is_err() {
+            return None;
+        }
+        payload_len = u64::from_be_bytes(ext) as usize;
+    }
+
+    let mut mask = [0u8; 4];
+    if masked {
+        if stream.read_exact(&mut mask).is_err() {
+            return None;
+        }
+    }
+
+    let mut payload = vec![0u8; payload_len];
+    if stream.read_exact(&mut payload).is_err() {
+        return None;
+    }
+
+    if masked {
+        for i in 0..payload_len {
+            payload[i] ^= mask[i % 4];
+        }
+    }
+
+    if opcode == 0x1 {
+        // Texto
+        String::from_utf8(payload).ok()
+    } else {
+        None
+    }
+}
+
+fn send_websocket_text<W: Write>(stream: &mut W, msg: &str) -> std::io::Result<()> {
+    let payload = msg.as_bytes();
+    let payload_len = payload.len();
+
+    let mut frame = Vec::with_capacity(2 + payload_len);
+    frame.push(0x81); // FIN + opcode texto
+
+    if payload_len <= 125 {
+        frame.push(payload_len as u8);
+    } else if payload_len <= 65535 {
+        frame.push(126);
+        frame.extend_from_slice(&(payload_len as u16).to_be_bytes());
+    } else {
+        frame.push(127);
+        frame.extend_from_slice(&(payload_len as u64).to_be_bytes());
+    }
+
+    frame.extend_from_slice(payload);
+
+    stream.write_all(&frame)?;
+    stream.flush()?;
+    Ok(())
 }
