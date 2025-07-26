@@ -14,10 +14,9 @@ cargo run
 ## TODOs
 
 - [x] HTTP Server
-- [x] Can Receive Messages from POST
 - [x] Can Upgrade connection from HTTP to WebSocket on `GET /messages`
-- [ ] WebSocket Push - saving messages
-- [ ] WebSocket Pull - receive new messages
+- [x] WebSocket Push - saving messages
+- [x] WebSocket Pull - receive new messages
 - [ ] Tests
 
 ## References
