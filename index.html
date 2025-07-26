@@ -1,20 +1,36 @@
 <html>
     <body>
-        <form id="form" method="POST">
-            <div class="chat">
-                <div style="display:flex; flex-direction: row;">
-                    <label style="width: fit-content;">Username:</label>
-                    <input style="margin-left: 10px;" type="text" name="username" />
-                </div>
-                <div class="chat-content-wrapper"></div>
-                <div class="chat-input-wrapper">
-                    <textarea name="message"></textarea>
-                </div>
-                <div style="margin-top: 15px;">
-                    <button type="submit">Enviar</button>
-                </div>
+        <div>
+            <div style="display:flex; flex-direction: row;">
+                <label for="InputWebSocketAddress">Address:</label>
+                <input type="text" id="InputWebSocketAddress" value="192.168.15.4:8080" style="margin-left: 10px;" />
+                <button id="ConnectButton" type="button" style="margin-left: 10px;">Connect</button>
+                <button id="DisconnectButton" type="button" style="margin-left: 10px;" hidden="true">Disconnect</button>
             </div>
-        </form>
+            <p id="ConnectionStatusConnected" class="text-green" style="margin-top: 10px;" hidden="true">Connected</p>
+            <p id="ConnectionStatusDisconnected" class="text-red" style="margin-top: 10px;">Disconnected</p>
+        </div>
+        
+        <div style="margin-top: 20px;">
+            <form id="form" method="POST">
+                <div class="chat">
+                    <div style="display:flex; flex-direction: row;">
+                        <label for="InputUsername" style="width: fit-content;">Username:</label>
+                        <input id="InputUsername" style="margin-left: 10px;" type="text" name="username" />
+                    </div>
+                    <div class="chat-content-wrapper">
+                        <div id="ChatContent">
+                        </div>
+                    </div>
+                    <div class="chat-input-wrapper">
+                        <textarea id="InputMessage" name="message"></textarea>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button type="submit">Enviar</button>
+                    </div>
+                </div>
+            </form>
+        </div>
     </body>
     <header>
         <style>
@@ -34,6 +50,16 @@
                 width: (100% - 10px);
                 height: 350px;
             }
+            #ChatContent {
+                margin: 10px;
+            }
+            #ChatContent > .message {
+                display: flex;
+                flex-direction: row;
+            }
+            #ChatContent > .message > span:first-child {
+                margin-right: 5px;
+            }
             .chat-input-wrapper > textarea {
                 width: (100% - 10px);
                 height: (150px - 10px);
@@ -43,13 +69,75 @@
             .chat-input-wrapper {
                 border: none;
             }
+            p.text-red { color: red; }
+            p.text-green { color: green; }
         </style>
         <script lang="javascript">
-            const chatWrapper = document.getElementsByClassName("chat-content-wrapper");
+            const inputWebSocketAddress = document.getElementById("InputWebSocketAddress");
+
+            const connectButton = document.getElementById("ConnectButton");
+            const disconnectButton = document.getElementById("DisconnectButton");
+
+            const chat = document.getElementById("ChatContent");
+
             const form = document.getElementById("form");
 
-            form.addEventListener('submit', (event) => {
+            let ws = null;
+            function webSocketConnect(input) {
+                ws = new WebSocket(`ws://${input}/messages`);
+                webSocketPrepare(ws);
+            }
+
+            function webSocketDisconnect() {
+                ws.close();
+            }
+
+            function webSocketPrepare(websocket) {
+                websocket.onopen = onWebSocketConnected;
+
+                websocket.onmessage = function(event) {
+                    let data = JSON.parse(event.data);
+                    addReceivedMessage(data.username, data.message);
+                }
+
+                websocket.onclose = onWebSocketDisconnected;
+
+                websocket.onerror = function(error) {
+                    console.error("Webocket error:", error);
+                }
+            }
+
+            function onWebSocketConnected() {
+                connectButton.hidden = true;
+                disconnectButton.hidden = false;
+
+                document.getElementById("ConnectionStatusConnected").hidden = false;
+                document.getElementById("ConnectionStatusDisconnected").hidden = true;
+            }
+
+            function onWebSocketDisconnected() {
+                connectButton.hidden = false;
+                disconnectButton.hidden = true;
+
+                document.getElementById("ConnectionStatusConnected").hidden = true;
+                document.getElementById("ConnectionStatusDisconnected").hidden = false;
+            }
+
+            connectButton.addEventListener("click", (event) => {
+                webSocketConnect(inputWebSocketAddress.value);
+            });
+
+            disconnectButton.addEventListener("click", (event) => {
+                webSocketDisconnect();
+            });
+
+            form.addEventListener("submit", (event) => {
                 event.preventDefault();
+
+                if (ws === null) {
+                    console.error("WebSocket not connected!");
+                    return;
+                }
 
                 const formData = new FormData(form);
                 const data = {};
@@ -57,26 +145,33 @@
                     data[key] = value;
                 }
 
-                fetch('http://192.168.15.4:8080', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        username: data['username'],
-                        message: data['message']
-                    })
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        console.log(data);
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                    });
+                if (!data["username"] || !data["message"]) {
+                    return;
+                }
 
-                console.log(data);
+                ws.send(JSON.stringify({
+                    username: data["username"],
+                    message: data["message"],
+                }));
             });
+
+            function addReceivedMessage(username, message) {
+                let chatUsername = document.getElementById("InputUsername").value;
+                let isActualChatUsername = username === chatUsername;
+
+                let spanUsername = document.createElement("span");
+                spanUsername.textContent = `${isActualChatUsername ? '(You) ' : ''}${username}:`;
+
+                let spanMessage = document.createElement("span");
+                spanMessage.textContent = message;
+
+                let newChatMessage = document.createElement("div")
+                newChatMessage.classList.add("message");
+                newChatMessage.appendChild(spanUsername);
+                newChatMessage.appendChild(spanMessage);
+
+                chat.appendChild(newChatMessage);
+            }
         </script>
     </header>
 </html>
