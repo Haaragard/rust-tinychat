@@ -1,6 +1,6 @@
 extern crate tiny_http;
 
-use std::{io::{Read, Write}, sync::{Arc, Mutex}};
+use std::{io::{Write}, sync::{Arc, Mutex}};
 
 use serde::{Deserialize, Serialize};
 
@@ -54,7 +54,7 @@ fn main() {
     }
 }
 
-fn handle_request(request: tiny_http::Request, messages_sent: Arc<Mutex<Vec<MessageSent>>>) {
+fn handle_request(mut request: tiny_http::Request, messages_sent: Arc<Mutex<Vec<MessageSent>>>) {
     match request.method() {
         tiny_http::Method::Options => {
             let response = tiny_http::Response::from_string("Ok")
@@ -70,6 +70,30 @@ fn handle_request(request: tiny_http::Request, messages_sent: Arc<Mutex<Vec<Mess
                 ));
 
             let _ = request.respond(response);
+        },
+        tiny_http::Method::Post => {
+            if request.url().contains("/messages") {
+                let mut output = String::new();
+                request.as_reader().read_to_string(&mut output).unwrap();
+
+                match serde_json::from_str::<MessageSent>(&output) {
+                    Ok(message_sent) => {
+                        println!("Mensagem recebida via WebSocket: {:?}", message_sent);
+
+                        if let Ok(mut vec) = messages_sent.lock() {
+                            vec.push(message_sent);
+                        }
+                    },
+                    Err(e) => {
+                        println!("Erro ao desserializar JSON: {}", e);
+                    }
+                };
+
+                let response = tiny_http::Response::from_string(output)
+                    .with_status_code(tiny_http::StatusCode(201))
+                    .with_header(create_header("Content-Type", "application/json"));
+                let _ = request.respond(response);
+            }
         },
         tiny_http::Method::Get => {
             if request.url().contains("/messages") {
@@ -134,27 +158,8 @@ fn start_websocket_connection(request: tiny_http::Request, messages_sent: Arc<Mu
     let mut stream = request.upgrade("websocket", response);
 
     let mut last_sent: usize = 0;
-
-    loop {
-        if let Some(msg) = read_websocket_frame(&mut stream) {
-            match serde_json::from_str::<MessageSent>(&msg) {
-                Ok(message_sent) => {
-                    println!("Mensagem recebida via WebSocket: {:?}", message_sent);
-
-                    if let Ok(mut vec) = messages_sent.lock() {
-                        vec.push(message_sent);
-                    }
-                },
-                Err(e) => {
-                    println!("Erro ao desserializar JSON: {}", e);
-                }
-            };
-            println!("Mensagem recebida via WebSocket: {}", msg);
-        } else {
-            println!("Conexão encerrada ou erro ao ler frame.");
-            break;
-        }
-
+    loop { // Infinite loop, even after client connection closed :sad:
+        println!("Running thread");
         // Envia apenas as mensagens novas
         if let Ok(vec) = messages_sent.lock() {
             while last_sent < vec.len() {
@@ -168,57 +173,7 @@ fn start_websocket_connection(request: tiny_http::Request, messages_sent: Arc<Mu
         // Pequeno delay para evitar busy loop
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-}
-
-fn read_websocket_frame<R: Read>(stream: &mut R) -> Option<String> {
-    let mut header = [0u8; 2];
-    if stream.read_exact(&mut header).is_err() {
-        return None;
-    }
-
-    let _fin = header[0] & 0x80 != 0;
-    let opcode = header[0] & 0x0F;
-    let masked = header[1] & 0x80 != 0;
-    let mut payload_len = (header[1] & 0x7F) as usize;
-
-    if payload_len == 126 {
-        let mut ext = [0u8; 2];
-        if stream.read_exact(&mut ext).is_err() {
-            return None;
-        }
-        payload_len = u16::from_be_bytes(ext) as usize;
-    } else if payload_len == 127 {
-        let mut ext = [0u8; 8];
-        if stream.read_exact(&mut ext).is_err() {
-            return None;
-        }
-        payload_len = u64::from_be_bytes(ext) as usize;
-    }
-
-    let mut mask = [0u8; 4];
-    if masked {
-        if stream.read_exact(&mut mask).is_err() {
-            return None;
-        }
-    }
-
-    let mut payload = vec![0u8; payload_len];
-    if stream.read_exact(&mut payload).is_err() {
-        return None;
-    }
-
-    if masked {
-        for i in 0..payload_len {
-            payload[i] ^= mask[i % 4];
-        }
-    }
-
-    if opcode == 0x1 {
-        // Texto
-        String::from_utf8(payload).ok()
-    } else {
-        None
-    }
+    todo!("Infinite loop, even after client connection closed :sad:");
 }
 
 fn send_websocket_text<W: Write>(stream: &mut W, msg: &str) -> std::io::Result<()> {
