@@ -133,26 +133,23 @@
 
             form.addEventListener("submit", (event) => {
                 event.preventDefault();
-
-                if (ws === null) {
-                    console.error("WebSocket not connected!");
-                    return;
-                }
-
+                
                 const formData = new FormData(form);
                 const data = {};
                 for (const [key, value] of formData.entries()) {
                     data[key] = value;
                 }
 
-                if (!data["username"] || !data["message"]) {
-                    return;
-                }
-
-                ws.send(JSON.stringify({
-                    username: data["username"],
-                    message: data["message"],
-                }));
+                fetch(`http://${inputWebSocketAddress.value}/messages`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        username: data["username"],
+                        message: data["message"],
+                    }),
+                });
             });
 
             function addReceivedMessage(username, message) {
